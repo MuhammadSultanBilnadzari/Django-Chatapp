@@ -1,0 +1,220 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Room: {{ room_name }}</title>
+  <link rel="icon" href="{% static 'img/favicon.ico' %}" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <meta name="description" content="Chat room {{ room_name }} dengan pesan real-time dan antarmuka modern." />
+
+  <script>
+    const roomName = "{{ room_name|escapejs }}";
+    const username = "{{ user.username|escapejs }}";
+  </script>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #e0e7ff, #f0f4ff);
+      color: #1f2937;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      background: linear-gradient(to right, #6366f1, #3b82f6);
+      color: #fff;
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      z-index: 10;
+    }
+
+    main {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    .message-container {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 0.5rem;
+    }
+
+    .message-self,
+    .message-other {
+      padding: 0.75rem 1rem;
+      border-radius: 1rem;
+      max-width: 60%;
+      word-break: break-word;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    .message-self {
+      background: linear-gradient(135deg, #4f46e5, #3b82f6);
+      color: #fff;
+      align-self: flex-end;
+    }
+
+    .message-other {
+      background: #fff;
+      color: #374151;
+      align-self: flex-start;
+    }
+
+    .message-time {
+      display: block;
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      text-align: right;
+      opacity: 0.8;
+    }
+
+    .message-other .message-time {
+      color: rgba(55, 65, 81, 0.6);
+    }
+
+    .centered-empty {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1rem;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    footer {
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
+      padding: 0.75rem 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    #chat-message-input {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 9999px;
+      padding: 0.5rem 1rem;
+      outline: none;
+      font-size: 1rem;
+      background: #f9fafb;
+      color: #111827;
+    }
+
+    #chat-message-input:focus {
+      border-color: #3b82f6;
+    }
+
+    #chat-message-submit {
+      background: linear-gradient(135deg, #4f46e5, #3b82f6);
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #chat-message-submit:hover {
+      background: linear-gradient(135deg, #4338ca, #2563eb);
+    }
+
+    #new-message-indicator {
+      position: fixed;
+      bottom: 6rem;
+      right: 1rem;
+      background: #3b82f6;
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <h1 class="text-lg font-semibold">Room: {{ room_name }}</h1>
+    <div class="flex items-center space-x-4 text-sm">
+      <span>Hi, <span class="font-medium underline underline-offset-4">{{ request.user.username }}</span></span>
+      <a href="{% url 'logout' %}" class="hover:underline text-indigo-100 hover:text-white font-semibold">Logout</a>
+    </div>
+  </nav>
+
+  <!-- Chat Messages -->
+  <main id="chat-log">
+    {% if messages %}
+      {% for message in messages %}
+        {% if message.user.username == request.user.username %}
+            <div class="message-container items-end fade-in">
+                <div class="message-self">
+                    {{ message.content|safe }}
+                    <span class="message-time">{{ message.timestamp|date:"H:i" }}</span>
+                </div>
+            </div>
+        {% else %}
+            <div class="message-container items-start fade-in">
+                <div class="message-other">
+                    <span class="text-xs font-semibold block mb-1 text-indigo-500">{{ message.user.username }}</span>
+                    {{ message.content|safe }}
+                    <span class="message-time">{{ message.timestamp|date:"H:i" }}</span>
+                </div>
+            </div>
+        {% endif %}
+
+      {% endfor %}
+    {% else %}
+      <div class="centered-empty">
+        Belum ada pesan. Jadilah yang pertama mengirim pesan!
+      </div>
+    {% endif %}
+  </main>
+
+  <!-- Typing Indicator -->
+  <div id="typing-indicator" class="text-sm text-gray-500 px-4 py-2 font-medium"></div>
+
+  <!-- New Message Indicator -->
+  <div id="new-message-indicator">Pesan Baru ▼</div>
+
+  <!-- Footer Chat Input -->
+  <footer>
+    <button id="emoji-toggle" title="Emoji" class="bg-gray-100 hover:bg-gray-200 text-yellow-500 px-2 py-1 rounded-full">😊</button>
+    <input id="file-upload" type="file" accept="image/*" class="hidden" />
+    <label for="file-upload" title="Upload Gambar" class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-pink-500 px-2 py-1 rounded-full">📎</label>
+    <input id="chat-message-input" type="text" placeholder="Ketik pesan..." autocomplete="off" />
+    <button id="chat-message-submit" aria-label="Kirim">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+      </svg>
+      Kirim
+    </button>
+  </footer>
+
+  <!-- Notification Sound -->
+  <audio id="notification-sound" src="{% static 'sound/notify.mp3' %}" preload="auto"></audio>
+
+  <!-- Chat Script -->
+  <script src="{% static 'js/chat.js' %}"></script>
+
+</body>
+</html>
