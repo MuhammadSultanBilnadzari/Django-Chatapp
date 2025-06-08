@@ -1,4 +1,22 @@
+// Ambil username dari localStorage, jika belum ada buat baru dan simpan
+(function () {
+  var username = localStorage.getItem('chatUsername');
+  if (!username) {
+    username = 'User_' + Math.floor(Math.random() * 1000);
+    localStorage.setItem('chatUsername', username);
+  }
+})();
+
 let chatSocket;
+
+// DOM references
+const chatLog = document.querySelector('#chat-log');
+const messageInput = document.querySelector('#chat-message-input');
+const messageButton = document.querySelector('#chat-message-submit');
+const newMessageIndicator = document.querySelector('#new-message-indicator');
+const notificationSound = document.querySelector('#notification-sound');
+
+let isUserNearBottom = true;
 
 function connectWebSocket() {
   chatSocket = new WebSocket(
@@ -7,13 +25,44 @@ function connectWebSocket() {
     '/ws/chat/' + roomName + '/'
   );
 
-  // Pesan masuk
+  // Saat WebSocket terbuka, load histori pesan via HTTP
+  chatSocket.onopen = () => {
+    fetch(`/messages/${roomName}/`)
+  .then(res => res.json())
+  .then(data => {
+    const chatLog = document.getElementById('chat-log');
+    chatLog.innerHTML = ''; // reset dulu
+
+    if (data.length === 0) {
+      chatLog.innerHTML = '<div class="centered-empty">Belum ada pesan. Jadilah yang pertama mengirim pesan!</div>';
+    } else {
+      data.forEach(msg => {
+        const msgDiv = document.createElement('div');
+        // contoh sederhana:
+        if (msg.username === username) {
+          msgDiv.className = 'message-container items-end fade-in';
+          msgDiv.innerHTML = `<div class="message-self">${msg.message}<span class="message-time">${new Date(msg.timestamp).toLocaleTimeString()}</span></div>`;
+        } else {
+          msgDiv.className = 'message-container items-start fade-in';
+          msgDiv.innerHTML = `<div class="message-other"><span class="text-xs font-semibold block mb-1 text-indigo-500">${msg.username}</span>${msg.message}<span class="message-time">${new Date(msg.timestamp).toLocaleTimeString()}</span></div>`;
+        }
+        chatLog.appendChild(msgDiv);
+      });
+    }
+  });
+  }
+
   chatSocket.onmessage = (e) => {
     const data = JSON.parse(e.data);
 
     if (data.typing !== undefined && data.username !== username) {
       document.querySelector("#typing-indicator").textContent =
         data.typing ? `${data.username} sedang mengetik...` : "";
+      return;
+    }
+
+    if (data.command === "delete_all_messages") {
+      chatLog.innerHTML = '<div class="centered-empty">Pesan dihapus oleh pengguna.</div>';
       return;
     }
 
@@ -28,32 +77,19 @@ function connectWebSocket() {
       }
     });
 
-    if (data.username !== username) {
+    if (data.username !== username && data.message) {
       playSound();
       showNotification(data.username, data.message);
     }
   };
 
-  // Jika socket putus, coba reconnect
   chatSocket.onclose = () => {
     console.warn('Disconnected. Reconnecting...');
     setTimeout(connectWebSocket, 3000);
   };
 }
 
-connectWebSocket();
-
-
-// DOM
-const chatLog = document.querySelector('#chat-log');
-const messageInput = document.querySelector('#chat-message-input');
-const messageButton = document.querySelector('#chat-message-submit');
-const newMessageIndicator = document.querySelector('#new-message-indicator');
-const notificationSound = document.querySelector('#notification-sound');
-
-let isUserNearBottom = true;
-
-// Auto-scroll
+// Auto-scroll fungsi
 function scrollToBottom(smooth = true) {
   chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
 }
@@ -112,7 +148,6 @@ function createMessageBubble(data) {
   }
   content.innerHTML = msg;
 
-  // Gambar auto-scroll
   const imgs = content.querySelectorAll('img');
   imgs.forEach(img => {
     img.addEventListener('load', () => {
@@ -122,14 +157,13 @@ function createMessageBubble(data) {
 
   bubble.appendChild(content);
 
-  // Waktu sesuai data dari server (pakai data.time jika dikirim) atau waktu lokal
   const time = document.createElement('div');
   time.className = 'text-xs text-right mt-1';
   const now = new Date();
   time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   bubble.appendChild(time);
 
-  bubble.addEventListener('dblclick', () => {
+  div.addEventListener('dblclick', () => {
     navigator.clipboard.writeText(data.message).then(() => alert("Pesan disalin!"));
   });
 
@@ -137,22 +171,42 @@ function createMessageBubble(data) {
   chatLog.appendChild(div);
 }
 
-// Scroll event
+// Event scroll chat log
 chatLog.addEventListener('scroll', () => {
   isUserNearBottom = checkNearBottom();
   if (isUserNearBottom) newMessageIndicator.style.display = 'none';
 });
 
-// Klik new message indicator
+// Klik new message indicator untuk scroll ke bawah
 newMessageIndicator.addEventListener('click', () => {
   scrollToBottom(true);
   newMessageIndicator.style.display = 'none';
   isUserNearBottom = true;
 });
 
-// Typing indicator (hanya kirim jika socket OPEN)
+// Hapus pesan lokal
+const deleteBtn = document.getElementById('delete-messages-btn');
+if (deleteBtn) {
+  deleteBtn.addEventListener('click', () => {
+    if (confirm('Yakin ingin menghapus semua pesan?')) {
+      localStorage.setItem(`deletedMessages-${username}`, 'true');
+      chatLog.innerHTML = `
+        <div class="centered-empty">
+          Pesan sudah dihapus.
+          <button id="restore-messages" class="underline text-blue-500">Tampilkan lagi</button>
+        </div>
+      `;
+      document.getElementById('restore-messages').onclick = () => {
+        localStorage.removeItem(`deletedMessages-${username}`);
+        location.reload();
+      };
+    }
+  });
+}
+
+// Typing indicator
 messageInput.addEventListener('input', () => {
-  if (chatSocket.readyState === WebSocket.OPEN) {
+  if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
     chatSocket.send(JSON.stringify({ 'typing': true, 'username': username }));
     clearTimeout(window.typingTimeout);
     window.typingTimeout = setTimeout(() => {
@@ -161,24 +215,25 @@ messageInput.addEventListener('input', () => {
   }
 });
 
-// Kirim pesan (hanya kirim jika socket OPEN)
+// Kirim pesan
 messageButton.onclick = () => {
   const message = messageInput.value.trim();
-  if (message && chatSocket.readyState === WebSocket.OPEN) {
+  if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
     chatSocket.send(JSON.stringify({ message, username }));
     messageInput.value = '';
   }
 };
 
-// Enter untuk kirim
+// Kirim pesan dengan Enter
 messageInput.addEventListener('keyup', (e) => {
   if (e.key === 'Enter') messageButton.click();
 });
 
-// Load
+// Load halaman
 window.addEventListener('load', () => {
   scrollToBottom(false);
   if (Notification.permission !== 'granted') Notification.requestPermission();
+  connectWebSocket();
 });
 
 // Emoji quick insert
@@ -187,13 +242,13 @@ document.getElementById('emoji-toggle').onclick = () => {
   messageInput.focus();
 };
 
-// Upload file (hanya kirim jika socket OPEN)
+// Upload file (gambar saja)
 document.getElementById('file-upload').addEventListener('change', function () {
   const file = this.files[0];
   if (file && file.type.startsWith("image/")) {
     const reader = new FileReader();
     reader.onload = (e) => {
-      if (chatSocket.readyState === WebSocket.OPEN) {
+      if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
         chatSocket.send(JSON.stringify({
           'message': `<img src="${e.target.result}" class="rounded-xl max-w-xs h-auto block" alt="image" />`,
           'username': username

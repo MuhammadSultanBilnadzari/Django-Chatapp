@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Room: {{ room_name }}</title>
+  <title>Room Chat</title>
   <link rel="icon" href="{% static 'img/favicon.ico' %}" />
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <meta name="description" content="Chat room {{ room_name }} dengan pesan real-time dan antarmuka modern." />
@@ -33,10 +33,31 @@
       color: #fff;
       padding: 1rem 1.5rem;
       display: flex;
-      justify-content: space-between;
+      justify-content: center; /* Center konten */
       align-items: center;
       box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      position: relative; /* untuk positioning button hapus */
       z-index: 10;
+    }
+
+    /* Button Hapus Pesan di pojok kiri atas */
+    #clear-chat-btn {
+      position: absolute;
+      left: 1.5rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #dc2626; /* merah */
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s ease-in-out;
+      border: none;
+      color: white;
+    }
+    #clear-chat-btn:hover {
+      background-color: #b91c1c;
     }
 
     main {
@@ -153,13 +174,41 @@
 <body>
 
   <!-- Navbar -->
-  <nav>
-    <h1 class="text-lg font-semibold">Room: {{ room_name }}</h1>
-    <div class="flex items-center space-x-4 text-sm">
-      <span>Hi, <span class="font-medium underline underline-offset-4">{{ request.user.username }}</span></span>
-      <a href="{% url 'logout' %}" class="hover:underline text-indigo-100 hover:text-white font-semibold">Logout</a>
+<nav class="bg-white shadow-md p-4 flex items-center justify-between rounded-b-xl">
+  <!-- Left: Logo / Room Name -->
+  <div class="flex items-center space-x-4">
+    <h1 class="text-xl font-bold text-indigo-600"></h1>
+  </div>
+
+  <!-- Middle: Clear Chat Button -->
+  <div>
+    <button id="clear-chat-btn"
+            class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition duration-200 shadow flex items-center gap-2"
+            title="Hapus semua pesan">
+      🗑️ <span>Hapus Chat</span>
+    </button>
+  </div>
+
+  <!-- Right: User Profile and Logout -->
+  <div class="flex items-center gap-4">
+    <!-- Profile -->
+    <div class="flex items-center gap-2">
+      <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" alt="Profile"
+           class="w-8 h-8 rounded-full border border-gray-300" />
+      <span class="font-medium text-gray-700">{{ request.user.username }}</span>
     </div>
-  </nav>
+
+    <!-- Logout -->
+    <form method="POST" action="{% url 'logout' %}">
+      {% csrf_token %}
+      <button type="submit"
+              class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-3 rounded-lg transition duration-200">
+        Logout
+      </button>
+    </form>
+  </div>
+</nav>
+
 
   <!-- Chat Messages -->
   <main id="chat-log">
@@ -181,7 +230,6 @@
                 </div>
             </div>
         {% endif %}
-
       {% endfor %}
     {% else %}
       <div class="centered-empty">
@@ -215,6 +263,20 @@
 
   <!-- Chat Script -->
   <script src="{% static 'js/chat.js' %}"></script>
+
+  <script>
+    // Tambahkan event handler tombol hapus pesan
+    document.getElementById('clear-chat-btn').addEventListener('click', () => {
+      if (confirm('Yakin ingin menghapus semua pesan?')) {
+        // Bersihkan chat di UI
+        document.getElementById('chat-log').innerHTML = '';
+        // Kirim perintah hapus ke server via WebSocket
+        if (typeof chatSocket !== 'undefined' && chatSocket.readyState === WebSocket.OPEN) {
+          chatSocket.send(JSON.stringify({ action: 'clear_messages', username }));
+        }
+      }
+    });
+  </script>
 
 </body>
 </html>

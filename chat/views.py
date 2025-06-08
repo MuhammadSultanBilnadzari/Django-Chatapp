@@ -5,6 +5,19 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from .models import Message, OnlineUser
+from django.http import JsonResponse
+from .models import Message
+
+@login_required
+def get_messages(request, room_name):
+    messages = Message.objects.filter(room=room_name).order_by('timestamp')
+    data = [{
+        'username': msg.user.username,
+        'message': msg.content,
+        'timestamp': msg.timestamp.isoformat()
+    } for msg in messages]
+    return JsonResponse(data, safe=False)
+
 
 def register_view(request):
     if request.method == 'POST':
@@ -48,4 +61,5 @@ def room(request, room_name):
         'room_name': room_name,
         'messages': messages,
         'users': users,
+        'username': request.user.username  # kirim username ke frontend
     })
